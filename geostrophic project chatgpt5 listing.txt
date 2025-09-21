@@ -1,0 +1,1057 @@
+Skip to content
+Chat history
+You said:
+Diastrophic winds
+ChatGPT said:
+
+Diastrophic winds are not a standard term in meteorology the way, say, geostrophic winds or anabatic winds are. The phrase sometimes appears as a misinterpretation or rare usage. Let me clarify the concepts involved:
+1. Diastrophism
+
+    In geology, diastrophism refers to the large-scale deformation of the Earth’s crust caused by tectonic forces (folding, faulting, uplift, subsidence).
+
+    These processes are slow and happen over geological time—millions of years—not on the scale of winds or weather.
+
+2. Winds and Diastrophism
+
+    Winds are an atmospheric phenomenon, driven by pressure gradients, Coriolis force, and friction.
+
+    Diastrophic forces are geological, not meteorological.
+
+    The two don’t directly connect—so “diastrophic winds” isn’t a recognized scientific category.
+
+3. Possible Confusions
+
+    Geostrophic winds: A very common and important concept in meteorology, describing winds that result from a balance between the Coriolis force and the pressure gradient force (ignoring friction). This term is sometimes misheard or misspelled as “diastrophic winds.”
+
+    Catastrophic winds: Used in contexts of hurricanes, cyclones, or tornados. Again, phonetically similar.
+
+✅ Most likely you mean “geostrophic winds.”
+Would you like me to give you a clear explanation (and even equations) for geostrophic winds, or are you more interested in the geological diastrophism side of things?
+You said:
+Geostrophic winds in python3
+ChatGPT said:
+
+Always show details
+
+# Geostrophic wind demo: create a reusable Python script and show a quick plot with synthetic data.
+import numpy as np
+import matplotlib.pyplot as plt
+from textwrap import dedent
+
+# Constants
+OMEGA = 7.2921159e-5  # Earth's rotation rate (s^-1)
+R_EARTH = 6_371_000.0 # Earth radius (m)
+G = 9.80665           # gravity (m/s^2)
+
+script = dedent(r'''
+"""
+geostrophic_wind_demo.py
+
+Compute geostrophic wind from a pressure (Pa) or height (m) field on a lat/lon grid.
+
+Usage (as a module):
+    from geostrophic_wind_demo import geostrophic_from_pressure, geostrophic_from_height
+
+This file also includes a __main__ section that runs a synthetic example:
+    python3 geostrophic_wind_demo.py
+"""
+
+import numpy as np
+
+OMEGA = 7.2921159e-5  # s^-1
+R_EARTH = 6_371_000.0 # m
+G = 9.80665           # m s^-2
+
+def coriolis(lat):
+    """Coriolis parameter f = 2 * Omega * sin(lat). lat in degrees, returns 2D array if lat is 2D."""
+    return 2.0 * OMEGA * np.sin(np.deg2rad(lat))
+
+def metric_dx_dy(lat, dlon_deg, dlat_deg):
+    """
+    Return grid spacing in meters for given latitude (deg) and grid step (deg).
+    dx = R * cos(phi) * dlon, dy = R * dlat, where angles are radians.
+    Accepts lat as a 2D array to produce 2D dx, dy.
+    """
+    dlon = np.deg2rad(dlon_deg)
+    dlat = np.deg2rad(dlat_deg)
+    dx = R_EARTH * np.cos(np.deg2rad(lat)) * dlon
+    dy = R_EARTH * dlat * np.ones_like(lat)
+    return dx, dy
+
+def centered_gradient(field, dx, dy):
+    """
+    Compute centered finite-difference gradients d(field)/dx and d(field)/dy.
+    field: 2D array (ny, nx)
+    dx, dy: 2D arrays (ny, nx) of grid spacing in meters.
+    Edges use one-sided differences.
+    Returns dfdx, dfdy (same shape).
+    """
+    ny, nx = field.shape
+    dfdx = np.empty_like(field, dtype=float)
+    dfdy = np.empty_like(field, dtype=float)
+
+    # X direction
+    dfdx[:,1:-1] = (field[:,2:] - field[:, :-2]) / (0.5*(dx[:,2:] + dx[:, :-2]))
+    dfdx[:,0]    = (field[:,1]  - field[:,0])   / dx[:,0]
+    dfdx[:,-1]   = (field[:,-1] - field[:,-2])  / dx[:,-1]
+
+    # Y direction
+    dfdy[1:-1,:] = (field[2:,:] - field[:-2,:]) / (0.5*(dy[2:,:] + dy[:-2,:]))
+    dfdy[0,:]    = (field[1,:]  - field[0,:])   / dy[0,:]
+    dfdy[-1,:]   = (field[-1,:] - field[-2,:])  / dy[-1,:]
+
+    return dfdx, dfdy
+
+def geostrophic_from_pressure(p, lat, dlon_deg, dlat_deg, rho=1.225, f_min=1e-5):
+    """
+    Compute geostrophic wind (u_g, v_g) from pressure (Pa) on a constant-height surface.
+    u_g = - (1/(rho f)) * dp/dy
+    v_g =   (1/(rho f)) * dp/dx
+    Inputs:
+        p:   2D array pressure in Pa, shape (ny, nx)
+        lat: 2D array of latitudes (deg), same shape as p (or 1D broadcastable)
+        dlon_deg, dlat_deg: grid spacing in degrees (scalars)
+        rho: air density (kg m^-3), default ~ sea level
+        f_min: minimum |f| to avoid blowup near equator
+    Returns: u_g, v_g in m/s
+    """
+    lat2d = np.broadcast_to(lat, p.shape)
+    dx, dy = metric_dx_dy(lat2d, dlon_deg, dlat_deg)
+    dpx, dpy = centered_gradient(p, dx, dy)
+    f = coriolis(lat2d)
+    f = np.where(np.abs(f) < f_min, np.sign(f)*f_min + (f==0)*f_min, f)  # clip small f
+    ug = - (1.0/(rho * f)) * dpy
+    vg =   (1.0/(rho * f)) * dpx
+    return ug, vg
+
+def geostrophic_from_height(Z, lat, dlon_deg, dlat_deg, f_min=1e-5):
+    """
+    Compute geostrophic wind (u_g, v_g) from geopotential height (m) on an isobaric surface.
+    u_g = - (g/f) * dZ/dy
+    v_g =   (g/f) * dZ/dx
+    """
+    lat2d = np.broadcast_to(lat, Z.shape)
+    dx, dy = metric_dx_dy(lat2d, dlon_deg, dlat_deg)
+    dZdx, dZdy = centered_gradient(Z, dx, dy)
+    f = coriolis(lat2d)
+    f = np.where(np.abs(f) < f_min, np.sign(f)*f_min + (f==0)*f_min, f)
+    ug = - (G / f) * dZdy
+    vg =   (G / f) * dZdx
+    return ug, vg
+
+def synthetic_pressure(lat, lon, p0=101325.0, amp=2000.0, lat0=-35.0, lon0=145.0, scale_km=800.0):
+    """
+    A smooth low-pressure 'vortex-like' Gaussian in Pa centered at (lat0, lon0).
+    """
+    # great-circle approx into meters
+    dphi = np.deg2rad(lat - lat0)
+    dlmb = np.deg2rad(lon - lon0)
+    # approximate local metric using mean latitude
+    latm = 0.5*(lat + lat0)
+    dx = R_EARTH * np.cos(np.deg2rad(latm)) * dlmb
+    dy = R_EARTH * dphi
+    r2 = dx*dx + dy*dy
+    s2 = (scale_km*1000.0)**2
+    return p0 - amp*np.exp(-r2/(2*s2))
+
+if __name__ == "__main__":
+    # Grid over southeastern Australia (roughly)
+    ny, nx = 60, 80
+    lat = np.linspace(-45, -25, ny)[:,None] * np.ones((1,nx))
+    lon = np.ones((ny,1)) * np.linspace(135, 155, nx)[None,:]
+
+    p = synthetic_pressure(lat, lon, lat0=-37.8, lon0=144.9, scale_km=700.0)
+    ug, vg = geostrophic_from_pressure(p, lat, dlon_deg=(lon[0,1]-lon[0,0]), dlat_deg=(lat[1,0]-lat[0,0]))
+
+    # Save small sample outputs for inspection
+    np.savez("geostrophic_synthetic_example.npz", lat=lat, lon=lon, p=p, ug=ug, vg=vg)
+    print("Wrote geostrophic_synthetic_example.npz")
+''')
+
+# Write the script to disk for the user to download
+with open('/mnt/data/geostrophic_wind_demo.py', 'w') as f:
+    f.write(script)
+
+# Now run a quick synthetic example here to visualize
+ny, nx = 50, 70
+lat = np.linspace(-45, -25, ny)[:,None] * np.ones((1,nx))
+lon = np.ones((ny,1)) * np.linspace(135, 155, nx)[None,:]
+
+# Synthetic Gaussian low centered near Melbourne
+def synthetic_pressure(lat, lon, p0=101325.0, amp=2000.0, lat0=-37.8, lon0=144.9, scale_km=700.0):
+    dphi = np.deg2rad(lat - lat0)
+    dlmb = np.deg2rad(lon - lon0)
+    latm = 0.5*(lat + lat0)
+    dx = R_EARTH * np.cos(np.deg2rad(latm)) * dlmb
+    dy = R_EARTH * dphi
+    r2 = dx*dx + dy*dy
+    s2 = (scale_km*1000.0)**2
+    return 101325.0 - 2000.0*np.exp(-r2/(2*s2))
+
+def coriolis(lat):
+    return 2.0 * OMEGA * np.sin(np.deg2rad(lat))
+
+def metric_dx_dy(lat, dlon_deg, dlat_deg):
+    dlon = np.deg2rad(dlon_deg)
+    dlat = np.deg2rad(dlat_deg)
+    dx = R_EARTH * np.cos(np.deg2rad(lat)) * dlon
+    dy = R_EARTH * dlat * np.ones_like(lat)
+    return dx, dy
+
+def centered_gradient(field, dx, dy):
+    ny, nx = field.shape
+    dfdx = np.empty_like(field, dtype=float)
+    dfdy = np.empty_like(field, dtype=float)
+    dfdx[:,1:-1] = (field[:,2:] - field[:, :-2]) / (0.5*(dx[:,2:] + dx[:, :-2]))
+    dfdx[:,0]    = (field[:,1]  - field[:,0])   / dx[:,0]
+    dfdx[:,-1]   = (field[:,-1] - field[:,-2])  / dx[:,-1]
+    dfdy[1:-1,:] = (field[2:,:] - field[:-2,:]) / (0.5*(dy[2:,:] + dy[:-2,:]))
+    dfdy[0,:]    = (field[1,:]  - field[0,:])   / dy[0,:]
+    dfdy[-1,:]   = (field[-1,:] - field[-2,:])  / dy[-1,:]
+    return dfdx, dfdy
+
+p = synthetic_pressure(lat, lon)
+dlon_deg = (lon[0,1] - lon[0,0])
+dlat_deg = (lat[1,0] - lat[0,0])
+dx, dy = metric_dx_dy(lat, dlon_deg, dlat_deg)
+dpx, dpy = centered_gradient(p, dx, dy)
+f = coriolis(lat)
+f = np.where(np.abs(f) < 1e-5, np.sign(f)*1e-5 + (f==0)*1e-5, f)  # clip
+rho = 1.225
+ug = -(1.0/(rho*f))*dpy
+vg =  (1.0/(rho*f))*dpx
+
+# Thin the vectors for a cleaner plot
+step = 3
+plt.figure(figsize=(7,5))
+plt.quiver(lon[::step, ::step], lat[::step, ::step], ug[::step, ::step], vg[::step, ::step], scale=700)
+plt.contour(lon, lat, p/100.0, levels=20)
+plt.xlabel("Longitude (deg)")
+plt.ylabel("Latitude (deg)")
+plt.title("Synthetic geostrophic wind (arrows) over pressure (hPa)")
+plt.tight_layout()
+plt.show()
+
+"/mnt/data/geostrophic_wind_demo.py"
+
+Result
+
+'/mnt/data/geostrophic_wind_demo.py'
+
+Synthetic geostrophic wind (arrows) over pressure (hPa)
+Now interactive! (Beta)
+Output image
+
+Here’s a clean, working Python 3 demo for computing and plotting geostrophic winds from a pressure (or height) field on a lat/lon grid. I’ve also saved a reusable script you can download.
+What’s inside
+
+    Functions for f=2Ωsin⁡ϕf=2Ωsinϕ, metric spacing dx,dydx,dy from degrees, and centered finite-difference gradients.
+
+    Two formulations:
+
+        From pressure on a constant-height surface:
+        ug=−1ρf∂p∂y,vg=1ρf∂p∂x
+        ug​=−ρf1​∂y∂p​,vg​=ρf1​∂x∂p​
+
+        From geopotential height on an isobaric surface:
+        ug=−gf∂Z∂y,vg=gf∂Z∂x
+        ug​=−fg​∂y∂Z​,vg​=fg​∂x∂Z​
+
+    A synthetic example (Gaussian low near Melbourne) with a quiver over pressure contours.
+
+Download the ready-to-run script
+
+Download geostrophic_wind_demo.py
+
+Run:
+
+python3 geostrophic_wind_demo.py
+
+It also saves a small .npz with lat/lon/pressure and computed ug,vgug​,vg​.
+
+If you’d like, I can adapt this to:
+
+    read a NetCDF (e.g., ERA5 or GFS) field and compute ug,vgug​,vg​ on a real domain,
+
+    output CSV/GeoTIFF,
+
+    or generate a Termux-friendly minimal plot script.
+
+You said:
+Screen list the program code
+ChatGPT said:
+
+Here’s the full Python 3 program code I generated for you (the file geostrophic_wind_demo.py):
+
+"""
+geostrophic_wind_demo.py
+
+Compute geostrophic wind from a pressure (Pa) or height (m) field on a lat/lon grid.
+
+Usage (as a module):
+    from geostrophic_wind_demo import geostrophic_from_pressure, geostrophic_from_height
+
+This file also includes a __main__ section that runs a synthetic example:
+    python3 geostrophic_wind_demo.py
+"""
+
+import numpy as np
+
+OMEGA = 7.2921159e-5  # s^-1
+R_EARTH = 6_371_000.0 # m
+G = 9.80665           # m s^-2
+
+def coriolis(lat):
+    """Coriolis parameter f = 2 * Omega * sin(lat). lat in degrees, returns 2D array if lat is 2D."""
+    return 2.0 * OMEGA * np.sin(np.deg2rad(lat))
+
+def metric_dx_dy(lat, dlon_deg, dlat_deg):
+    """
+    Return grid spacing in meters for given latitude (deg) and grid step (deg).
+    dx = R * cos(phi) * dlon, dy = R * dlat, where angles are radians.
+    Accepts lat as a 2D array to produce 2D dx, dy.
+    """
+    dlon = np.deg2rad(dlon_deg)
+    dlat = np.deg2rad(dlat_deg)
+    dx = R_EARTH * np.cos(np.deg2rad(lat)) * dlon
+    dy = R_EARTH * dlat * np.ones_like(lat)
+    return dx, dy
+
+def centered_gradient(field, dx, dy):
+    """
+    Compute centered finite-difference gradients d(field)/dx and d(field)/dy.
+    field: 2D array (ny, nx)
+    dx, dy: 2D arrays (ny, nx) of grid spacing in meters.
+    Edges use one-sided differences.
+    Returns dfdx, dfdy (same shape).
+    """
+    ny, nx = field.shape
+    dfdx = np.empty_like(field, dtype=float)
+    dfdy = np.empty_like(field, dtype=float)
+
+    # X direction
+    dfdx[:,1:-1] = (field[:,2:] - field[:, :-2]) / (0.5*(dx[:,2:] + dx[:, :-2]))
+    dfdx[:,0]    = (field[:,1]  - field[:,0])   / dx[:,0]
+    dfdx[:,-1]   = (field[:,-1] - field[:,-2])  / dx[:,-1]
+
+    # Y direction
+    dfdy[1:-1,:] = (field[2:,:] - field[:-2,:]) / (0.5*(dy[2:,:] + dy[:-2,:]))
+    dfdy[0,:]    = (field[1,:]  - field[0,:])   / dy[0,:]
+    dfdy[-1,:]   = (field[-1,:] - field[-2,:])  / dy[-1,:]
+
+    return dfdx, dfdy
+
+def geostrophic_from_pressure(p, lat, dlon_deg, dlat_deg, rho=1.225, f_min=1e-5):
+    """
+    Compute geostrophic wind (u_g, v_g) from pressure (Pa) on a constant-height surface.
+    u_g = - (1/(rho f)) * dp/dy
+    v_g =   (1/(rho f)) * dp/dx
+    Inputs:
+        p:   2D array pressure in Pa, shape (ny, nx)
+        lat: 2D array of latitudes (deg), same shape as p (or 1D broadcastable)
+        dlon_deg, dlat_deg: grid spacing in degrees (scalars)
+        rho: air density (kg m^-3), default ~ sea level
+        f_min: minimum |f| to avoid blowup near equator
+    Returns: u_g, v_g in m/s
+    """
+    lat2d = np.broadcast_to(lat, p.shape)
+    dx, dy = metric_dx_dy(lat2d, dlon_deg, dlat_deg)
+    dpx, dpy = centered_gradient(p, dx, dy)
+    f = coriolis(lat2d)
+    f = np.where(np.abs(f) < f_min, np.sign(f)*f_min + (f==0)*f_min, f)  # clip small f
+    ug = - (1.0/(rho * f)) * dpy
+    vg =   (1.0/(rho * f)) * dpx
+    return ug, vg
+
+def geostrophic_from_height(Z, lat, dlon_deg, dlat_deg, f_min=1e-5):
+    """
+    Compute geostrophic wind (u_g, v_g) from geopotential height (m) on an isobaric surface.
+    u_g = - (g/f) * dZ/dy
+    v_g =   (g/f) * dZ/dx
+    """
+    lat2d = np.broadcast_to(lat, Z.shape)
+    dx, dy = metric_dx_dy(lat2d, dlon_deg, dlat_deg)
+    dZdx, dZdy = centered_gradient(Z, dx, dy)
+    f = coriolis(lat2d)
+    f = np.where(np.abs(f) < f_min, np.sign(f)*f_min + (f==0)*f_min, f)
+    ug = - (G / f) * dZdy
+    vg =   (G / f) * dZdx
+    return ug, vg
+
+def synthetic_pressure(lat, lon, p0=101325.0, amp=2000.0, lat0=-35.0, lon0=145.0, scale_km=800.0):
+    """
+    A smooth low-pressure 'vortex-like' Gaussian in Pa centered at (lat0, lon0).
+    """
+    # great-circle approx into meters
+    dphi = np.deg2rad(lat - lat0)
+    dlmb = np.deg2rad(lon - lon0)
+    # approximate local metric using mean latitude
+    latm = 0.5*(lat + lat0)
+    dx = R_EARTH * np.cos(np.deg2rad(latm)) * dlmb
+    dy = R_EARTH * dphi
+    r2 = dx*dx + dy*dy
+    s2 = (scale_km*1000.0)**2
+    return p0 - amp*np.exp(-r2/(2*s2))
+
+if __name__ == "__main__":
+    # Grid over southeastern Australia (roughly)
+    ny, nx = 60, 80
+    lat = np.linspace(-45, -25, ny)[:,None] * np.ones((1,nx))
+    lon = np.ones((ny,1)) * np.linspace(135, 155, nx)[None,:]
+
+    p = synthetic_pressure(lat, lon, lat0=-37.8, lon0=144.9, scale_km=700.0)
+    ug, vg = geostrophic_from_pressure(p, lat, dlon_deg=(lon[0,1]-lon[0,0]), dlat_deg=(lat[1,0]-lat[0,0]))
+
+    # Save small sample outputs for inspection
+    np.savez("geostrophic_synthetic_example.npz", lat=lat, lon=lon, p=p, ug=ug, vg=vg)
+    print("Wrote geostrophic_synthetic_example.npz")
+
+Do you also want me to include the quick matplotlib quiver plot demo (that draws arrows over pressure contours), so you can see the geostrophic circulation on screen when you run it?
+You said:
+Termux friendly plot script 
+ChatGPT said:
+
+Always show details
+
+# Create a super-minimal Termux-friendly plot script that saves a PNG (no GUI needed).
+from textwrap import dedent
+
+code = dedent(r'''
+#!/usr/bin/env python3
+# geostrophic_termux.py
+# Termux-friendly: uses Agg backend (no GUI), saves a PNG in the current dir.
+
+import os
+import argparse
+import numpy as np
+
+# Force non-interactive backend before importing pyplot
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+
+OMEGA = 7.2921159e-5  # s^-1
+R_EARTH = 6_371_000.0 # m
+G = 9.80665           # m s^-2
+
+def coriolis(lat):
+    return 2.0 * OMEGA * np.sin(np.deg2rad(lat))
+
+def metric_dx_dy(lat, dlon_deg, dlat_deg):
+    dlon = np.deg2rad(dlon_deg)
+    dlat = np.deg2rad(dlat_deg)
+    dx = R_EARTH * np.cos(np.deg2rad(lat)) * dlon
+    dy = R_EARTH * dlat * np.ones_like(lat)
+    return dx, dy
+
+def centered_gradient(field, dx, dy):
+    ny, nx = field.shape
+    dfdx = np.empty_like(field, dtype=float)
+    dfdy = np.empty_like(field, dtype=float)
+    dfdx[:,1:-1] = (field[:,2:] - field[:, :-2]) / (0.5*(dx[:,2:] + dx[:, :-2]))
+    dfdx[:,0]    = (field[:,1]  - field[:,0])   / dx[:,0]
+    dfdx[:,-1]   = (field[:,-1] - field[:,-2])  / dx[:,-1]
+    dfdy[1:-1,:] = (field[2:,:] - field[:-2,:]) / (0.5*(dy[2:,:] + dy[:-2,:]))
+    dfdy[0,:]    = (field[1,:]  - field[0,:])   / dy[0,:]
+    dfdy[-1,:]   = (field[-1,:] - field[-2,:])  / dy[-1,:]
+    return dfdx, dfdy
+
+def geostrophic_from_pressure(p, lat, dlon_deg, dlat_deg, rho=1.225, f_min=1e-5):
+    lat2d = np.broadcast_to(lat, p.shape)
+    dx, dy = metric_dx_dy(lat2d, dlon_deg, dlat_deg)
+    dpx, dpy = centered_gradient(p, dx, dy)
+    f = coriolis(lat2d)
+    f = np.where(np.abs(f) < f_min, np.sign(f)*f_min + (f==0)*f_min, f)
+    ug = - (1.0/(rho * f)) * dpy
+    vg =   (1.0/(rho * f)) * dpx
+    return ug, vg
+
+def synthetic_pressure(lat, lon, p0=101325.0, amp=2000.0, lat0=-37.8, lon0=144.9, scale_km=700.0):
+    dphi = np.deg2rad(lat - lat0)
+    dlmb = np.deg2rad(lon - lon0)
+    latm = 0.5*(lat + lat0)
+    dx = R_EARTH * np.cos(np.deg2rad(latm)) * dlmb
+    dy = R_EARTH * dphi
+    r2 = dx*dx + dy*dy
+    s2 = (scale_km*1000.0)**2
+    return p0 - amp*np.exp(-r2/(2*s2))
+
+def main():
+    ap = argparse.ArgumentParser(description="Termux-friendly geostrophic wind plot (PNG output).")
+    ap.add_argument("--lat-min", type=float, default=-45.0)
+    ap.add_argument("--lat-max", type=float, default=-25.0)
+    ap.add_argument("--lon-min", type=float, default=135.0)
+    ap.add_argument("--lon-max", type=float, default=155.0)
+    ap.add_argument("--ny", type=int, default=60, help="lat grid points")
+    ap.add_argument("--nx", type=int, default=80, help="lon grid points")
+    ap.add_argument("--low-lat", type=float, default=-37.8, help="center lat of synthetic low")
+    ap.add_argument("--low-lon", type=float, default=144.9, help="center lon of synthetic low")
+    ap.add_argument("--scale-km", type=float, default=700.0, help="radius (rough) of the low")
+    ap.add_argument("--outfile", type=str, default="geostrophic_termux.png")
+    ap.add_argument("--quiver-step", type=int, default=3, help="thin arrows by this step")
+    ap.add_argument("--dpi", type=int, default=160)
+    args = ap.parse_args()
+
+    lat = np.linspace(args.lat_min, args.lat_max, args.ny)[:,None] * np.ones((1,args.nx))
+    lon = np.ones((args.ny,1)) * np.linspace(args.lon_min, args.lon_max, args.nx)[None,:]
+
+    p = synthetic_pressure(lat, lon, lat0=args.low_lat, lon0=args.low_lon, scale_km=args.scale_km)
+    dlon_deg = (lon[0,1] - lon[0,0])
+    dlat_deg = (lat[1,0] - lat[0,0])
+    ug, vg = geostrophic_from_pressure(p, lat, dlon_deg, dlat_deg)
+
+    step = max(1, args.quiver_step)
+
+    plt.figure(figsize=(7,5))
+    # pressure in hPa for contours
+    cs = plt.contour(lon, lat, p/100.0, levels=20)
+    plt.clabel(cs, inline=1, fontsize=8, fmt="%.0f")
+    plt.quiver(lon[::step, ::step], lat[::step, ::step], ug[::step, ::step], vg[::step, ::step], scale=700)
+    plt.xlabel("Longitude (deg)")
+    plt.ylabel("Latitude (deg)")
+    plt.title("Geostrophic wind (arrows) over pressure (hPa)")
+    plt.tight_layout()
+    plt.grid(True, linestyle=":", linewidth=0.5)
+
+    out = os.path.abspath(args.outfile)
+    plt.savefig(out, dpi=args.dpi)
+    print(out)
+
+if __name__ == "__main__":
+    main()
+''')
+
+with open('/mnt/data/geostrophic_termux.py', 'w') as f:
+    f.write(code)
+
+# Also run it once here to produce a PNG preview file for the user to download
+import subprocess, sys, os, json, textwrap
+import pathlib
+p = subprocess.run(['python3','/mnt/data/geostrophic_termux.py'], capture_output=True, text=True)
+png_path = p.stdout.strip() if p.returncode == 0 else None
+png_path
+
+Always show details
+
+# Re-create the Termux-friendly script and generate the PNG.
+from textwrap import dedent
+import subprocess, os
+
+code = dedent(r'''#!/usr/bin/env python3
+import os, argparse, numpy as np
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+
+OMEGA=7.2921159e-5; R_EARTH=6371000.0; G=9.80665
+def coriolis(lat): return 2.0*OMEGA*np.sin(np.deg2rad(lat))
+def metric_dx_dy(lat,dlon_deg,dlat_deg):
+    dlon=np.deg2rad(dlon_deg); dlat=np.deg2rad(dlat_deg)
+    dx=R_EARTH*np.cos(np.deg2rad(lat))*dlon; dy=R_EARTH*dlat*np.ones_like(lat); return dx,dy
+def centered_gradient(field,dx,dy):
+    ny,nx=field.shape; dfdx=np.empty_like(field,float); dfdy=np.empty_like(field,float)
+    dfdx[:,1:-1]=(field[:,2:]-field[:,:-2])/(0.5*(dx[:,2:]+dx[:,:-2])); dfdx[:,0]=(field[:,1]-field[:,0])/dx[:,0]; dfdx[:,-1]=(field[:,-1]-field[:,-2])/dx[:,-1]
+    dfdy[1:-1,:]=(field[2:,:]-field[:-2,:])/(0.5*(dy[2:,:]+dy[:-2,:])); dfdy[0,:]=(field[1,:]-field[0,:])/dy[0,:]; dfdy[-1,:]=(field[-1,:]-field[-2,:])/dy[-1,:]
+    return dfdx,dfdy
+def geostrophic_from_pressure(p,lat,dlon_deg,dlat_deg,rho=1.225,f_min=1e-5):
+    lat2=np.broadcast_to(lat,p.shape); dx,dy=metric_dx_dy(lat2,dlon_deg,dlat_deg); dpx,dpy=centered_gradient(p,dx,dy)
+    f=coriolis(lat2); f=np.where(np.abs(f)<f_min,np.sign(f)*f_min+(f==0)*f_min,f)
+    ug=-(1.0/(rho*f))*dpy; vg=(1.0/(rho*f))*dpx; return ug,vg
+def synthetic_pressure(lat,lon,p0=101325.0,amp=2000.0,lat0=-37.8,lon0=144.9,scale_km=700.0):
+    dphi=np.deg2rad(lat-lat0); dlmb=np.deg2rad(lon-lon0); latm=0.5*(lat+lat0)
+    dx=R_EARTH*np.cos(np.deg2rad(latm))*dlmb; dy=R_EARTH*dphi; r2=dx*dx+dy*dy; s2=(scale_km*1000.0)**2
+    return p0-amp*np.exp(-r2/(2*s2))
+def main():
+    ap=argparse.ArgumentParser(description="Termux-friendly geostrophic wind plot (PNG).")
+    ap.add_argument("--lat-min",type=float,default=-45.0); ap.add_argument("--lat-max",type=float,default=-25.0)
+    ap.add_argument("--lon-min",type=float,default=135.0); ap.add_argument("--lon-max",type=float,default=155.0)
+    ap.add_argument("--ny",type=int,default=60); ap.add_argument("--nx",type=int,default=80)
+    ap.add_argument("--low-lat",type=float,default=-37.8); ap.add_argument("--low-lon",type=float,default=144.9)
+    ap.add_argument("--scale-km",type=float,default=700.0); ap.add_argument("--outfile",type=str,default="geostrophic_termux.png")
+    ap.add_argument("--quiver-step",type=int,default=3); ap.add_argument("--dpi",type=int,default=160)
+    a=ap.parse_args()
+    lat=np.linspace(a.lat_min,a.lat_max,a.ny)[:,None]*np.ones((1,a.nx)); lon=np.ones((a.ny,1))*np.linspace(a.lon_min,a.lon_max,a.nx)[None,:]
+    p=synthetic_pressure(lat,lon,lat0=a.low_lat,lon0=a.low_lon,scale_km=a.scale_km)
+    dlon=(lon[0,1]-lon[0,0]); dlat=(lat[1,0]-lat[0,0]); ug,vg=geostrophic_from_pressure(p,lat,dlon,dlat)
+    step=max(1,a.quiver_step); plt.figure(figsize=(7,5))
+    cs=plt.contour(lon,lat,p/100.0,levels=20); plt.clabel(cs,inline=1,fontsize=8,fmt="%.0f")
+    plt.quiver(lon[::step,::step],lat[::step,::step],ug[::step,::step],vg[::step,::step],scale=700)
+    plt.xlabel("Longitude (deg)"); plt.ylabel("Latitude (deg)"); plt.title("Geostrophic wind (arrows) over pressure (hPa)")
+    plt.grid(True,linestyle=":",linewidth=0.5); plt.tight_layout(); out=os.path.abspath(a.outfile); plt.savefig(out,dpi=a.dpi); print(out)
+if __name__=="__main__": main()
+''')
+
+open('/mnt/data/geostrophic_termux.py','w').write(code)
+
+# Run once to generate a PNG preview
+proc = subprocess.run(['python3','/mnt/data/geostrophic_termux.py'], capture_output=True, text=True)
+png_path = proc.stdout.strip() if proc.returncode == 0 else None
+png_path
+
+Result
+
+'/home/sandbox/geostrophic_termux.png'
+
+Done. Here’s a Termux-friendly script that uses a non-GUI backend and saves a PNG:
+
+    Download: geostrophic_termux.py
+
+    A preview PNG was generated: geostrophic_termux.png
+
+How to run in Termux
+
+pkg install python -y
+pip install numpy matplotlib
+
+# run (saves PNG to current dir)
+python geostrophic_termux.py
+
+# open the PNG (if you have termux-api installed)
+termux-open geostrophic_termux.png
+# or just copy it off your device / view in a gallery app
+
+Optional flags
+
+python geostrophic_termux.py \
+  --lat-min -45 --lat-max -25 \
+  --lon-min 135 --lon-max 155 \
+  --ny 60 --nx 80 \
+  --low-lat -37.8 --low-lon 144.9 \
+  --scale-km 700 \
+  --quiver-step 3 \
+  --outfile melb_geos.png --dpi 160
+
+Want a no-matplotlib variant that writes CSV of ug,vgug​,vg​ so you can plot with gnuplot (very light on Termux)? I can drop that in too.
+You said:
+
+
+output CSV/GeoTIFF,
+ChatGPT said:
+
+Always show details
+
+# Create a CSV/GeoTIFF exporter that depends only on numpy and tifffile (pure-Python wheels).
+from textwrap import dedent
+import subprocess, os, json, textwrap, pathlib, sys
+
+script = dedent(r'''
+#!/usr/bin/env python3
+"""
+geostrophic_export.py
+
+Compute geostrophic wind from a synthetic pressure field (or later from your own arrays)
+and export results to CSV and GeoTIFF (EPSG:4326) without requiring GDAL.
+Uses numpy + tifffile only.
+
+Example:
+    python geostrophic_export.py --csv-out geo_demo.csv --tif-out geo_demo.tif
+
+Outputs bands (in order) to GeoTIFF:
+    1: pressure_hPa
+    2: ug (m s^-1)
+    3: vg (m s^-1)
+    4: speed = sqrt(ug^2 + vg^2) (m s^-1)
+"""
+
+import argparse
+import numpy as np
+from math import sin, radians
+import tifffile
+
+OMEGA = 7.2921159e-5  # s^-1
+R_EARTH = 6_371_000.0 # m
+G = 9.80665           # m s^-2
+
+def coriolis(lat):
+    return 2.0 * OMEGA * np.sin(np.deg2rad(lat))
+
+def metric_dx_dy(lat, dlon_deg, dlat_deg):
+    dlon = np.deg2rad(dlon_deg)
+    dlat = np.deg2rad(dlat_deg)
+    dx = R_EARTH * np.cos(np.deg2rad(lat)) * dlon
+    dy = R_EARTH * dlat * np.ones_like(lat)
+    return dx, dy
+
+def centered_gradient(field, dx, dy):
+    ny, nx = field.shape
+    dfdx = np.empty_like(field, dtype=float)
+    dfdy = np.empty_like(field, dtype=float)
+    dfdx[:,1:-1] = (field[:,2:] - field[:, :-2]) / (0.5*(dx[:,2:] + dx[:, :-2]))
+    dfdx[:,0]    = (field[:,1]  - field[:,0])   / dx[:,0]
+    dfdx[:,-1]   = (field[:,-1] - field[:,-2])  / dx[:,-1]
+    dfdy[1:-1,:] = (field[2:,:] - field[:-2,:]) / (0.5*(dy[2:,:] + dy[:-2,:]))
+    dfdy[0,:]    = (field[1,:]  - field[0,:])   / dy[0,:]
+    dfdy[-1,:]   = (field[-1,:] - field[-2,:])  / dy[-1,:]
+    return dfdx, dfdy
+
+def geostrophic_from_pressure(p, lat, dlon_deg, dlat_deg, rho=1.225, f_min=1e-5):
+    lat2d = np.broadcast_to(lat, p.shape)
+    dx, dy = metric_dx_dy(lat2d, dlon_deg, dlat_deg)
+    dpx, dpy = centered_gradient(p, dx, dy)
+    f = coriolis(lat2d)
+    f = np.where(np.abs(f) < f_min, np.sign(f)*f_min + (f==0)*f_min, f)
+    ug = - (1.0/(rho * f)) * dpy
+    vg =   (1.0/(rho * f)) * dpx
+    return ug, vg
+
+def synthetic_pressure(lat, lon, p0=101325.0, amp=2000.0, lat0=-37.8, lon0=144.9, scale_km=700.0):
+    dphi = np.deg2rad(lat - lat0)
+    dlmb = np.deg2rad(lon - lon0)
+    latm = 0.5*(lat + lat0)
+    dx = R_EARTH * np.cos(np.deg2rad(latm)) * dlmb
+    dy = R_EARTH * dphi
+    r2 = dx*dx + dy*dy
+    s2 = (scale_km*1000.0)**2
+    return p0 - amp*np.exp(-r2/(2*s2))
+
+def write_csv(path, lat, lon, p, ug, vg):
+    """
+    Write a tidy CSV with columns: lat, lon, pressure_hPa, ug, vg, speed
+    """
+    pressure_hPa = p / 100.0
+    speed = np.sqrt(ug**2 + vg**2)
+    ny, nx = p.shape
+    out = np.column_stack([lat.ravel(), lon.ravel(), pressure_hPa.ravel(), ug.ravel(), vg.ravel(), speed.ravel()])
+    header = "lat,lon,pressure_hPa,ug_ms,vg_ms,speed_ms"
+    np.savetxt(path, out, delimiter=",", header=header, comments="", fmt="%.6f")
+
+def _geotiff_tags_from_lonlat_grid(lon, lat):
+    """
+    Build GeoTIFF ModelPixelScaleTag, ModelTiepointTag, and GeoKeyDirectory tags
+    for a regular lon/lat grid in EPSG:4326.
+    Assumes lon,lat are 2D arrays with uniform spacing.
+    """
+    # Assume row-major: axis0 = lat (south->north), axis1 = lon (west->east)
+    # GeoTIFF expects tiepoint at (i=0,j=0) -> (x=lon_UL, y=lat_UL)
+    # Determine pixel size (deg/pixel)
+    dlon = float(lon[0,1] - lon[0,0])
+    dlat = float(lat[1,0] - lat[0,0])
+    # Upper-left corner coordinates:
+    lon_ul = float(lon[0,0])
+    lat_ul = float(lat[0,0])
+    # But if lat increases downward, adjust signs; our grid is usually increasing with index (south->north).
+    # We keep positive dlat; GeoTIFF uses ModelPixelScale with y-scale positive; meaningful software interprets via tiepoints.
+    ModelPixelScaleTag = (33550, 'd', 3, (abs(dlon), abs(dlat), 0.0))
+    # Tiepoint: (i, j, k, x, y, z), here i=j=k=z=0, x=lon_ul, y=lat_ul
+    ModelTiepointTag = (33922, 'd', 6, (0.0, 0.0, 0.0, lon_ul, lat_ul, 0.0))
+
+    # GeoKeyDirectoryTag (34735), GeoAsciiParamsTag (34737)
+    # Minimal keys for EPSG:4326 (WGS 84) geographic coordinate system.
+    # Structure: [KeyDirectoryVersion, KeyRevision, MinorRevision, NumberOfKeys, ... KeyEntries ...]
+    # Each KeyEntry: [KeyID, TIFFTagLocation, Count, Value_Offset]
+    # Keys:
+    # 1024 GTModelTypeGeoKey = 2 (Geographic)
+    # 1025 GTRasterTypeGeoKey = 1 (PixelIsArea)
+    # 2048 GeographicTypeGeoKey = 4326 (WGS84)
+    # 2054 GeogAngularUnitsGeoKey = 9102 (degrees)
+    geo_keys = np.array([
+        1, 1, 0, 4,           # header
+        1024, 0, 1, 2,        # GTModelTypeGeoKey = 2
+        1025, 0, 1, 1,        # GTRasterTypeGeoKey = 1
+        2048, 0, 1, 4326,     # GeographicTypeGeoKey = 4326
+        2054, 0, 1, 9102,     # GeogAngularUnitsGeoKey = 9102 (Degree)
+    ], dtype=np.uint16)
+    GeoKeyDirectoryTag = (34735, 'H', geo_keys.size, geo_keys.tobytes())
+    # No ASCII params needed for these keys
+    return [ModelPixelScaleTag, ModelTiepointTag, GeoKeyDirectoryTag]
+
+def write_geotiff(path, lon, lat, bands, descriptions):
+    """
+    Write a multi-band GeoTIFF with WGS84 lon/lat georeferencing.
+    bands: list/tuple of 2D numpy arrays with identical shape (ny, nx)
+    descriptions: list of band names (strings), same length as bands
+    """
+    assert len(bands) == len(descriptions)
+    ny, nx = bands[0].shape
+    # Stack into (samples, rows, cols) for tifffile: shape (bands, ny, nx)
+    data = np.stack(bands, axis=0).astype(np.float32)
+    extratags = _geotiff_tags_from_lonlat_grid(lon, lat)
+    # Write
+    with tifffile.TiffWriter(path, bigtiff=False) as tiff:
+        tiff.write(
+            data,
+            photometric='minisblack',
+            metadata=None,
+            contiguous=True,
+            extratags=extratags,
+        )
+    # Append band descriptions as ImageDescription JSON for convenience
+    try:
+        import json
+        desc_json = json.dumps({"bands": descriptions})
+        # Reopen and set description (not all readers use it, but it's handy)
+        with tifffile.TiffFile(path, mode='r+b') as tf:
+            for page, name in zip(tf.pages, descriptions):
+                page.description = name
+    except Exception:
+        pass
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--lat-min", type=float, default=-45.0)
+    ap.add_argument("--lat-max", type=float, default=-25.0)
+    ap.add_argument("--lon-min", type=float, default=135.0)
+    ap.add_argument("--lon-max", type=float, default=155.0)
+    ap.add_argument("--ny", type=int, default=60)
+    ap.add_argument("--nx", type=int, default=80)
+    ap.add_argument("--low-lat", type=float, default=-37.8)
+    ap.add_argument("--low-lon", type=float, default=144.9)
+    ap.add_argument("--scale-km", type=float, default=700.0)
+    ap.add_argument("--csv-out", type=str, default="geostrophic.csv")
+    ap.add_argument("--tif-out", type=str, default="geostrophic.tif")
+    args = ap.parse_args()
+
+    lat = np.linspace(args.lat_min, args.lat_max, args.ny)[:,None] * np.ones((1,args.nx))
+    lon = np.ones((args.ny,1)) * np.linspace(args.lon_min, args.lon_max, args.nx)[None,:]
+
+    p = synthetic_pressure(lat, lon, lat0=args.low_lat, lon0=args.low_lon, scale_km=args.scale_km)
+    dlon_deg = float(lon[0,1] - lon[0,0])
+    dlat_deg = float(lat[1,0] - lat[0,0])
+    ug, vg = geostrophic_from_pressure(p, lat, dlon_deg, dlat_deg)
+
+    # CSV
+    if args.csv_out:
+        write_csv(args.csv_out, lat, lon, p, ug, vg)
+        print(f"CSV: {os.path.abspath(args.csv_out)}")
+
+    # GeoTIFF (bands: pressure_hPa, ug, vg, speed)
+    if args.tif_out:
+        speed = np.sqrt(ug**2 + vg**2)
+        write_geotiff(args.tif_out, lon, lat, [p/100.0, ug, vg, speed], ["pressure_hPa","ug_ms","vg_ms","speed_ms"])
+        print(f"GeoTIFF: {os.path.abspath(args.tif_out)}")
+
+if __name__ == "__main__":
+    main()
+''')
+
+open('/mnt/data/geostrophic_export.py','w').write(script)
+
+# Try running it to generate example outputs so the user can download immediately.
+# Install tifffile (pure-python wheel) if needed.
+try:
+    import tifffile  # noqa: F401
+except Exception:
+    import sys, subprocess
+    subprocess.run([sys.executable, "-m", "pip", "install", "tifffile", "--quiet"], check=False)
+
+proc = subprocess.run(["python3", "/mnt/data/geostrophic_export.py", "--csv-out", "geo_demo.csv", "--tif-out", "geo_demo.tif"], capture_output=True, text=True)
+print(proc.stdout if proc.stdout else proc.stderr)
+
+Always show details
+
+# Re-run creation (kernel was reset). Then execute once to produce sample outputs.
+from textwrap import dedent
+import subprocess, sys, os
+
+script = dedent(r'''#!/usr/bin/env python3
+import argparse, os, numpy as np, tifffile
+
+OMEGA=7.2921159e-5; R_EARTH=6371000.0; G=9.80665
+def coriolis(lat): return 2.0*OMEGA*np.sin(np.deg2rad(lat))
+def metric_dx_dy(lat,dlon_deg,dlat_deg):
+    dlon=np.deg2rad(dlon_deg); dlat=np.deg2rad(dlat_deg)
+    dx=R_EARTH*np.cos(np.deg2rad(lat))*dlon; dy=R_EARTH*dlat*np.ones_like(lat); return dx,dy
+def centered_gradient(field,dx,dy):
+    ny,nx=field.shape; dfdx=np.empty_like(field,float); dfdy=np.empty_like(field,float)
+    dfdx[:,1:-1]=(field[:,2:]-field[:,:-2])/(0.5*(dx[:,2:]+dx[:,:-2])); dfdx[:,0]=(field[:,1]-field[:,0])/dx[:,0]; dfdx[:,-1]=(field[:,-1]-field[:,-2])/dx[:,-1]
+    dfdy[1:-1,:]=(field[2:,:]-field[:-2,:])/(0.5*(dy[2:,:]+dy[:-2,:])); dfdy[0,:]=(field[1,:]-field[0,:])/dy[0,:]; dfdy[-1,:]=(field[-1,:]-field[-2,:])/dy[-1,:]
+    return dfdx,dfdy
+def geostrophic_from_pressure(p,lat,dlon_deg,dlat_deg,rho=1.225,f_min=1e-5):
+    lat2=np.broadcast_to(lat,p.shape); dx,dy=metric_dx_dy(lat2,dlon_deg,dlat_deg); dpx,dpy=centered_gradient(p,dx,dy)
+    f=2.0*OMEGA*np.sin(np.deg2rad(lat2)); f=np.where(np.abs(f)<f_min,np.sign(f)*f_min+(f==0)*f_min,f)
+    ug=-(1.0/(rho*f))*dpy; vg=(1.0/(rho*f))*dpx; return ug,vg
+def synthetic_pressure(lat,lon,p0=101325.0,amp=2000.0,lat0=-37.8,lon0=144.9,scale_km=700.0):
+    dphi=np.deg2rad(lat-lat0); dlmb=np.deg2rad(lon-lon0); latm=0.5*(lat+lat0)
+    dx=R_EARTH*np.cos(np.deg2rad(latm))*dlmb; dy=R_EARTH*dphi; r2=dx*dx+dy*dy; s2=(scale_km*1000.0)**2
+    return p0-amp*np.exp(-r2/(2*s2))
+def write_csv(path,lat,lon,p,ug,vg):
+    pressure_hPa=p/100.0; speed=np.sqrt(ug**2+vg**2)
+    out=np.column_stack([lat.ravel(),lon.ravel(),pressure_hPa.ravel(),ug.ravel(),vg.ravel(),speed.ravel()])
+    header="lat,lon,pressure_hPa,ug_ms,vg_ms,speed_ms"
+    np.savetxt(path,out,delimiter=",",header=header,comments="",fmt="%.6f")
+def _geotiff_tags_from_lonlat_grid(lon,lat):
+    dlon=float(lon[0,1]-lon[0,0]); dlat=float(lat[1,0]-lat[0,0]); lon_ul=float(lon[0,0]); lat_ul=float(lat[0,0])
+    ModelPixelScaleTag=(33550,'d',3,(abs(dlon),abs(dlat),0.0))
+    ModelTiepointTag=(33922,'d',6,(0.0,0.0,0.0,lon_ul,lat_ul,0.0))
+    import numpy as np as _np
+    geo_keys=_np.array([1,1,0,4, 1024,0,1,2, 1025,0,1,1, 2048,0,1,4326, 2054,0,1,9102],dtype=_np.uint16)
+    GeoKeyDirectoryTag=(34735,'H',geo_keys.size,geo_keys.tobytes())
+    return [ModelPixelScaleTag,ModelTiepointTag,GeoKeyDirectoryTag]
+def write_geotiff(path,lon,lat,bands,descriptions):
+    ny,nx=bands[0].shape; data=np.stack(bands,axis=0).astype(np.float32); extratags=_geotiff_tags_from_lonlat_grid(lon,lat)
+    with tifffile.TiffWriter(path,bigtiff=False) as tiff:
+        tiff.write(data,photometric='minisblack',metadata=None,contiguous=True,extratags=extratags)
+def main():
+    ap=argparse.ArgumentParser()
+    ap.add_argument("--lat-min",type=float,default=-45.0); ap.add_argument("--lat-max",type=float,default=-25.0)
+    ap.add_argument("--lon-min",type=float,default=135.0); ap.add_argument("--lon-max",type=float,default=155.0)
+    ap.add_argument("--ny",type=int,default=60); ap.add_argument("--nx",type=int,default=80)
+    ap.add_argument("--low-lat",type=float,default=-37.8); ap.add_argument("--low-lon",type=float,default=144.9)
+    ap.add_argument("--scale-km",type=float,default=700.0)
+    ap.add_argument("--csv-out",type=str,default="geostrophic.csv"); ap.add_argument("--tif-out",type=str,default="geostrophic.tif")
+    a=ap.parse_args()
+    lat=np.linspace(a.lat_min,a.lat_max,a.ny)[:,None]*np.ones((1,a.nx)); lon=np.ones((a.ny,1))*np.linspace(a.lon_min,a.lon_max,a.nx)[None,:]
+    p=synthetic_pressure(lat,lon,lat0=a.low_lat,lon0=a.low_lon,scale_km=a.scale_km)
+    dlon=float(lon[0,1]-lon[0,0]); dlat=float(lat[1,0]-lat[0,0]); ug,vg=geostrophic_from_pressure(p,lat,dlon,dlat)
+    if a.csv_out: write_csv(a.csv_out,lat,lon,p,ug,vg); print("CSV:",os.path.abspath(a.csv_out))
+    if a.tif_out:
+        speed=np.sqrt(ug**2+vg**2)
+        write_geotiff(a.tif_out,lon,lat,[p/100.0,ug,vg,speed],["pressure_hPa","ug_ms","vg_ms","speed_ms"])
+        print("GeoTIFF:",os.path.abspath(a.tif_out))
+if __name__=="__main__": main()
+''')
+
+open('/mnt/data/geostrophic_export.py','w').write(script)
+
+# Ensure tifffile is available
+try:
+    import tifffile  # noqa
+except Exception:
+    subprocess.run([sys.executable, "-m", "pip", "install", "tifffile", "--quiet"])
+
+# Run the exporter to produce example files
+proc = subprocess.run(["python3","/mnt/data/geostrophic_export.py","--csv-out","geo_demo.csv","--tif-out","geo_demo.tif"], capture_output=True, text=True)
+print(proc.stdout if proc.stdout else proc.stderr)
+
+STDOUT/STDERR
+
+  File "/mnt/data/geostrophic_export.py", line 31
+    import numpy as np as _np
+                       ^^
+SyntaxError: invalid syntax
+
+Always show details
+
+# Fix the syntax error in the exporter (np alias). Re-write and run again.
+from textwrap import dedent
+import subprocess, sys, os
+
+script = dedent(r'''#!/usr/bin/env python3
+import argparse, os, numpy as np, tifffile
+
+OMEGA=7.2921159e-5; R_EARTH=6371000.0; G=9.80665
+def coriolis(lat): return 2.0*OMEGA*np.sin(np.deg2rad(lat))
+def metric_dx_dy(lat,dlon_deg,dlat_deg):
+    dlon=np.deg2rad(dlon_deg); dlat=np.deg2rad(dlat_deg)
+    dx=R_EARTH*np.cos(np.deg2rad(lat))*dlon; dy=R_EARTH*dlat*np.ones_like(lat); return dx,dy
+def centered_gradient(field,dx,dy):
+    ny,nx=field.shape; dfdx=np.empty_like(field,float); dfdy=np.empty_like(field,float)
+    dfdx[:,1:-1]=(field[:,2:]-field[:,:-2])/(0.5*(dx[:,2:]+dx[:,:-2])); dfdx[:,0]=(field[:,1]-field[:,0])/dx[:,0]; dfdx[:,-1]=(field[:,-1]-field[:,-2])/dx[:,-1]
+    dfdy[1:-1,:]=(field[2:,:]-field[:-2,:])/(0.5*(dy[2:,:]+dy[:-2,:])); dfdy[0,:]=(field[1,:]-field[0,:])/dy[0,:]; dfdy[-1,:]=(field[-1,:]-field[-2,:])/dy[-1,:]
+    return dfdx,dfdy
+def geostrophic_from_pressure(p,lat,dlon_deg,dlat_deg,rho=1.225,f_min=1e-5):
+    lat2=np.broadcast_to(lat,p.shape); dx,dy=metric_dx_dy(lat2,dlon_deg,dlat_deg); dpx,dpy=centered_gradient(p,dx,dy)
+    f=2.0*OMEGA*np.sin(np.deg2rad(lat2)); f=np.where(np.abs(f)<f_min,np.sign(f)*f_min+(f==0)*f_min,f)
+    ug=-(1.0/(rho*f))*dpy; vg=(1.0/(rho*f))*dpx; return ug,vg
+def synthetic_pressure(lat,lon,p0=101325.0,amp=2000.0,lat0=-37.8,lon0=144.9,scale_km=700.0):
+    dphi=np.deg2rad(lat-lat0); dlmb=np.deg2rad(lon-lon0); latm=0.5*(lat+lat0)
+    dx=R_EARTH*np.cos(np.deg2rad(latm))*dlmb; dy=R_EARTH*dphi; r2=dx*dx+dy*dy; s2=(scale_km*1000.0)**2
+    return p0-amp*np.exp(-r2/(2*s2))
+def write_csv(path,lat,lon,p,ug,vg):
+    pressure_hPa=p/100.0; speed=np.sqrt(ug**2+vg**2)
+    out=np.column_stack([lat.ravel(),lon.ravel(),pressure_hPa.ravel(),ug.ravel(),vg.ravel(),speed.ravel()])
+    header="lat,lon,pressure_hPa,ug_ms,vg_ms,speed_ms"
+    np.savetxt(path,out,delimiter=",",header=header,comments="",fmt="%.6f")
+def _geotiff_tags_from_lonlat_grid(lon,lat):
+    dlon=float(lon[0,1]-lon[0,0]); dlat=float(lat[1,0]-lat[0,0]); lon_ul=float(lon[0,0]); lat_ul=float(lat[0,0])
+    ModelPixelScaleTag=(33550,'d',3,(abs(dlon),abs(dlat),0.0))
+    ModelTiepointTag=(33922,'d',6,(0.0,0.0,0.0,lon_ul,lat_ul,0.0))
+    import numpy as _np
+    geo_keys=_np.array([1,1,0,4, 1024,0,1,2, 1025,0,1,1, 2048,0,1,4326, 2054,0,1,9102],dtype=_np.uint16)
+    GeoKeyDirectoryTag=(34735,'H',geo_keys.size,geo_keys.tobytes())
+    return [ModelPixelScaleTag,ModelTiepointTag,GeoKeyDirectoryTag]
+def write_geotiff(path,lon,lat,bands,descriptions):
+    ny,nx=bands[0].shape; data=np.stack(bands,axis=0).astype(np.float32); extratags=_geotiff_tags_from_lonlat_grid(lon,lat)
+    with tifffile.TiffWriter(path,bigtiff=False) as tiff:
+        tiff.write(data,photometric='minisblack',metadata=None,contiguous=True,extratags=extratags)
+def main():
+    ap=argparse.ArgumentParser()
+    ap.add_argument("--lat-min",type=float,default=-45.0); ap.add_argument("--lat-max",type=float,default=-25.0)
+    ap.add_argument("--lon-min",type=float,default=135.0); ap.add_argument("--lon-max",type=float,default=155.0)
+    ap.add_argument("--ny",type=int,default=60); ap.add_argument("--nx",type=int,default=80)
+    ap.add_argument("--low-lat",type=float,default=-37.8); ap.add_argument("--low-lon",type=float,default=144.9)
+    ap.add_argument("--scale-km",type=float,default=700.0)
+    ap.add_argument("--csv-out",type=str,default="geostrophic.csv"); ap.add_argument("--tif-out",type=str,default="geostrophic.tif")
+    a=ap.parse_args()
+    lat=np.linspace(a.lat_min,a.lat_max,a.ny)[:,None]*np.ones((1,a.nx)); lon=np.ones((a.ny,1))*np.linspace(a.lon_min,a.lon_max,a.nx)[None,:]
+    p=synthetic_pressure(lat,lon,lat0=a.low_lat,lon0=a.low_lon,scale_km=a.scale_km)
+    dlon=float(lon[0,1]-lon[0,0]); dlat=float(lat[1,0]-lat[0,0]); ug,vg=geostrophic_from_pressure(p,lat,dlon,dlat)
+    if a.csv_out: write_csv(a.csv_out,lat,lon,p,ug,vg); print("CSV:",os.path.abspath(a.csv_out))
+    if a.tif_out:
+        speed=np.sqrt(ug**2+vg**2)
+        write_geotiff(a.tif_out,lon,lat,[p/100.0,ug,vg,speed],["pressure_hPa","ug_ms","vg_ms","speed_ms"])
+        print("GeoTIFF:",os.path.abspath(a.tif_out))
+if __name__=="__main__": main()
+''')
+
+open('/mnt/data/geostrophic_export.py','w').write(script)
+
+# Ensure tifffile is available
+try:
+    import tifffile  # noqa
+except Exception:
+    subprocess.run([sys.executable, "-m", "pip", "install", "tifffile", "--quiet"])
+
+proc = subprocess.run(["python3","/mnt/data/geostrophic_export.py","--csv-out","geo_demo.csv","--tif-out","geo_demo.tif"], capture_output=True, text=True)
+print(proc.stdout if proc.stdout else proc.stderr)
+
+STDOUT/STDERR
+
+CSV: /home/sandbox/geo_demo.csv
+GeoTIFF: /home/sandbox/geo_demo.tif
+
+Perfect—added export options for both CSV and GeoTIFF (no GDAL required).
+Download the exporter
+
+    Script: geostrophic_export.py
+
+    Sample outputs I just generated:
+
+        CSV: geo_demo.csv
+
+        GeoTIFF: geo_demo.tif
+
+How it works
+
+    CSV columns: lat, lon, pressure_hPa, ug_ms, vg_ms, speed_ms
+
+    GeoTIFF: 4 bands in EPSG:4326 (lon/lat):
+
+        pressure_hPa
+
+        ug_ms
+
+        vg_ms
+
+        speed_ms
+
+Termux install & run
+
+pkg install python -y
+pip install numpy tifffile
+
+# run with defaults (synthetic low near Melbourne)
+python geostrophic_export.py --csv-out geo.csv --tif-out geo.tif
+
+# tweak domain / resolution / output names
+python geostrophic_export.py \
+  --lat-min -45 --lat-max -25 \
+  --lon-min 135 --lon-max 155 \
+  --ny 120 --nx 160 \
+  --low-lat -37.8 --low-lon 144.9 --scale-km 700 \
+  --csv-out melb_geo.csv --tif-out melb_geo.tif
+
+Plugging in real data later
+
+If you’ve got pressure or height on a regular lat/lon grid (e.g., ERA5, GFS):
+
+    Load your arrays (lat, lon, field) instead of the synthetic one.
+
+    Call geostrophic_from_pressure(...) or adapt to height (geostrophic_from_height from the earlier script).
+
+    Then call write_csv(...) and write_geotiff(...).
+
+Want me to wire this to NetCDF (xarray) ingestion next so you can point it at an ERA5 file and get ug,vgug​,vg​ CSV/GeoTIFF in one shot?
+
+
+ChatGPT can make mistakes. Check important info.
